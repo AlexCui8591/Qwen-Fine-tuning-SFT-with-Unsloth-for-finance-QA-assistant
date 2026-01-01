@@ -1,286 +1,365 @@
-# Qwen-Fine-tuning-SFT-with-Unsloth-for-finance-QA-assistant
-This project establishes a proprietary dataset for the financial investment sector by compiling relevant research reports and materials from the financial domain. It employs Unsloth to conduct LoRA + 4-bit Supervised Fine-Tuning (SFT) on Qwen2.5-7B-Instruct, subsequently exporting the LoRA Adapter weights and tokeniser while conducting validation. 
+````markdown
+# QWEN_FINETUNING：Qwen2.5-7B-Instruct 的 LoRA SFT 微调（Unsloth + TRL）
 
-# QWEN_FINETUNING — Qwen2.5-7B-Instruct LoRA SFT (Unsloth + TRL)
-
-Supervised fine-tuning (SFT) for **Qwen/Qwen2.5-7B-Instruct** using **Unsloth** + **TRL SFTTrainer** with **4-bit quantization** and **LoRA adapters**.
-
-> ✅ Includes: dataset mixing scripts, training, evaluation (loss & perplexity), inference demo, and an interactive CLI chat.
+> 使用 **Unsloth** + **TRL SFTTrainer** 对 `Qwen/Qwen2.5-7B-Instruct` 做 **4-bit 量化加载 + LoRA 适配器** 的 **SFT（监督微调）**。  
+> 项目包含：**数据集混合构建（两套方案）/ 训练 / 评估（loss & perplexity）/ 推理示例 / 终端聊天（流式输出）**。
 
 ---
 
-## Table of Contents
+## 目录
 
-- [Features](#features)
-- [Project Layout](#project-layout)
-- [Quickstart](#quickstart)
-- [Installation](#installation)
-- [Dataset](#dataset)
-  - [Data Format (JSONL)](#data-format-jsonl)
-  - [Build Mixed Dataset (Two Options)](#build-mixed-dataset-two-options)
-- [Training](#training)
-  - [Default Training Recipe](#default-training-recipe)
-  - [Prompt Template](#prompt-template)
-  - [Outputs](#outputs)
-- [Evaluation](#evaluation)
-- [Inference](#inference)
-- [Chat CLI](#chat-cli)
-- [Reproducibility](#reproducibility)
-- [GitHub Publishing Guide](#github-publishing-guide)
-- [Troubleshooting](#troubleshooting)
-- [Acknowledgements](#acknowledgements)
-- [License](#license)
-
----
-
-## Features
-
-- **SFT (Supervised Fine-Tuning)** via `trl.SFTTrainer`
-- **4-bit loading** (`load_in_4bit=True`) for memory-efficient training
-- **LoRA adapters** targeting Qwen projection modules:
-  - `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`
-- **Auto train/val split** (90/10) with a fixed seed
-- **Dataset mixing utilities**
-  - small-scale quick build (`data_integration.py`)
-  - large-scale domain-filtered build (`data_set_generation.py`)
-- **Evaluation**: `eval_loss` + `perplexity`
-- **Inference demo** + **CLI chat** with streaming generation
+- [项目亮点](#项目亮点)
+- [项目结构](#项目结构)
+- [快速开始](#快速开始)
+- [环境与安装](#环境与安装)
+- [数据集](#数据集)
+  - [数据格式（JSONL）](#数据格式jsonl)
+  - [Option A：小规模混合构建（快速验证）](#option-a小规模混合构建快速验证)
+  - [Option B：大规模混合构建（领域筛选）](#option-b大规模混合构建领域筛选)
+- [训练（SFT + LoRA + 4bit）](#训练sft--lora--4bit)
+  - [默认训练配方（来自代码）](#默认训练配方来自代码)
+  - [Prompt 模板](#prompt-模板)
+  - [训练输出](#训练输出)
+- [评估（loss & perplexity）](#评估loss--perplexity)
+- [推理（单条示例）](#推理单条示例)
+- [终端聊天（CLI）](#终端聊天cli)
+- [可复现性与推荐实践](#可复现性与推荐实践)
+- [发布到 GitHub：所有选项（必读）](#发布到-github所有选项必读)
+  - [Option 1：只开源代码（推荐默认）](#option-1只开源代码推荐默认)
+  - [Option 2：发布 LoRA 权重（Git LFS）](#option-2发布-lora-权重git-lfs)
+  - [Option 3：发布到 Hugging Face / GitHub Release](#option-3发布到-hugging-face--github-release)
+- [附录：.gitignore / Git LFS / requirements 模板](#附录gitignore--git-lfs--requirements-模板)
+- [常见问题（FAQ）](#常见问题faq)
+- [致谢](#致谢)
+- [许可证](#许可证)
 
 ---
 
-## Project Layout
+## 项目要点
 
-Recommended layout (matches your current scripts):
+- **SFT 监督微调**：使用 `trl.SFTTrainer`
+- **4-bit 量化加载**：显存友好（`load_in_4bit=True`）
+- **LoRA 覆盖 Qwen 常见投影层**：`q_proj/k_proj/v_proj/o_proj/gate_proj/up_proj/down_proj`
+- **自动划分训练/验证集**：90% / 10%（固定 seed）
+- **两套数据集混合构建脚本**
+  - Option A：小规模混合（更快）
+  - Option B：大规模混合 + 领域关键词筛选（更强，但更慢/更大）
+- **评估脚本**：输出 `eval_loss` 与 `perplexity`
+- **推理示例与 CLI 聊天**：流式输出、重复惩罚等常用解码参数
+
+---
+
+## 项目结构
+
+> 下面结构与你当前脚本命名一致：
 
 ```bash
 QWEN_FINETUNING/
-├─ Qwen_finetuning.py               # SFT training entry (Unsloth + TRL)
-├─ evaluate.py                      # eval loss & perplexity
-├─ inference.py                     # single-turn inference demo
-├─ chat.py                          # interactive CLI chat (streaming)
-├─ data_integration.py              # mixed dataset builder (small)
-├─ data_set_generation.py           # mixed dataset builder (large + domain filtering)
-├─ data/
-│  ├─ my_dataset.json               # your private/custom data (recommended: DO NOT commit)
-│  └─ mixed_finetune_dataset.jsonl  # final training JSONL (recommended: DO NOT commit / or only sample)
-├─ Qwen_finetuning_model/           # saved LoRA adapter output (optional to publish)
-├─ Qwen_finetuning_tokenizer/       # saved tokenizer output (optional)
-└─ README.md
-Quickstart
-Minimal “run it end-to-end” flow:
+├─ Qwen_finetuning.py               # 训练入口（Unsloth + TRL SFT）
+├─ evaluate.py                      # 评估：loss & perplexity
+├─ inference.py                     # 推理：单条示例
+├─ chat.py                          # 终端聊天：交互式 + 流式输出
+├─ data_integration.py              # 数据混合构建（Option A：小规模）
+├─ data_set_generation.py           # 数据混合构建（Option B：大规模 + 领域筛选）
+├─ my_dataset.json                  # 你的自定义/私有数据
+├─ mixed_finetune_dataset.jsonl     # 混合后的训练数据
+├─ outputs/                         
+├─ Qwen_finetuning_model/           # 训练产物：LoRA adapter
+└─ Qwen_finetuning_tokenizer/       # tokenizer 
+````
 
-bash
-复制代码
-# 1) install deps
+---
+
+## 快速开始
+
+```bash
+# 1) 安装依赖
 pip install -U pip
 pip install unsloth transformers datasets trl accelerate peft bitsandbytes tqdm torch
 
-# 2) build dataset (choose ONE)
+# 2) 构建数据（任选一个 Option）
 python data_integration.py
-# or:
+# 或：
 python data_set_generation.py
 
-# 3) train
+# 3) 训练
 python Qwen_finetuning.py
 
-# 4) evaluate
+# 4) 评估
 python evaluate.py
 
-# 5) try inference / chat
+# 5) 体验推理 / 聊天
 python inference.py
 python chat.py
-Installation
-Prerequisites
-Python 3.10+ recommended
+```
 
-NVIDIA GPU + CUDA recommended (4-bit quantization uses bitsandbytes)
+---
 
-Install dependencies
-bash
-复制代码
+## 环境与安装
+
+### 运行前提
+
+* Python 3.10+（推荐）
+* NVIDIA GPU + CUDA（推荐；脚本会把输入 `.to("cuda")`）
+* `bitsandbytes`（4-bit 量化依赖）
+
+### 安装依赖
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/Mac: source .venv/bin/activate
+
 pip install -U pip
 pip install unsloth transformers datasets trl accelerate peft bitsandbytes tqdm torch
-Tip: If you want strict reproducibility, create a requirements.txt with pip freeze > requirements.txt after a successful run.
+```
+> `pip freeze > requirements.txt`
 
-Dataset
-Data Format (JSONL)
-Training reads a local JSONL file:
+---
 
-default: mixed_finetune_dataset.jsonl
+## 数据集
 
-Each line must be a JSON object containing:
+你的训练脚本默认读取：
+* `mixed_finetune_dataset.jsonl`（位于项目根目录）
 
-instruction (string)
+### 数据格式（JSONL）
 
-input (string, can be empty)
+每行一条 JSON，包含以下字段：
 
-output (string)
+* `instruction`：指令/问题（字符串）
+* `input`：补充信息（字符串，可为空）
+* `output`：期望回答（字符串）
 
-Example:
+示例：
 
-json
-复制代码
-{"instruction":"Explain what LoRA fine-tuning is.","input":"","output":"LoRA (Low-Rank Adaptation) is a parameter-efficient finetuning method..."}
-{"instruction":"Summarize the following paper.","input":"Paper abstract: ...","output":"This paper proposes ..."}
-Build Mixed Dataset (Two Options)
-You have two dataset builders:
+```json
+{"instruction":"解释什么是LoRA微调","input":"","output":"LoRA（Low-Rank Adaptation）是一种参数高效微调方法..."}
+{"instruction":"总结以下内容","input":"这里是补充信息...","output":"总结如下：..."}
+```
 
-Option A — Small-scale quick build (fast sanity check)
-Script: data_integration.py
+---
 
-bash
-复制代码
+### Option A：小规模混合构建（快速验证）
+
+脚本：`data_integration.py`
+
+```bash
 python data_integration.py
-Default behavior:
+```
 
-mixes:
+默认行为（来自代码）：
 
-your local my_dataset.json
+* 读取本地：`my_dataset.json`
+* streaming 拉取并采样：
 
-Open-Orca/SlimOrca (streaming)
+  * `Open-Orca/SlimOrca`
+  * `qiaojin/PubMedQA`（pqa_labeled）
+* 按比例混合并打乱写入：
 
-qiaojin/PubMedQA (pqa_labeled, streaming)
+  * 输出：`mixed_finetune_dataset.jsonl`
 
-writes: mixed_finetune_dataset.jsonl
+你可以在脚本中调整：
 
-You can edit:
+* `TOTAL_SAMPLES`（默认 2000）
+* `RATIOS`（reports/orca/pubmed）
+* `MY_REPORT_DATA_PATH` / `OUTPUT_FILE`
 
-TOTAL_SAMPLES
+> 适用场景：先跑通流程、快速验证训练是否收敛、检查 prompt/格式是否正确。
 
-RATIOS
+---
 
-paths: MY_REPORT_DATA_PATH, OUTPUT_FILE
+### Option B：大规模混合构建（领域筛选）
 
-Option B — Large-scale build + domain filtering
-Script: data_set_generation.py
+脚本：`data_set_generation.py`
 
-bash
-复制代码
+```bash
 python data_set_generation.py
-Default behavior:
+```
 
-mixes:
+默认行为（来自代码）：
 
-your local my_dataset.json
+* 读取本地：`my_dataset.json`
+* streaming 拉取并采样：
 
-Open-Orca/SlimOrca (streaming)
+  * `Open-Orca/SlimOrca`
+  * `qiaojin/PubMedQA`（pqa_labeled）
+  * `HuggingFaceH4/stack-exchange-preferences`
+* 对 StackExchange 数据按关键词过滤，拆成：
+  * AI 域
+  * IC 域
+  * biomed域
+* 混合并打乱写入：
 
-qiaojin/PubMedQA (pqa_labeled, streaming)
+  * 输出：`mixed_finetune_dataset.jsonl`
 
-HuggingFaceH4/stack-exchange-preferences (streaming)
+你可以在脚本中调整（常用项）：
 
-filters StackExchange samples using keyword lists for:
+* `TOTAL_SAMPLES`（默认 240000，较大！）
+* `RATIOS`（my_reports/orca/bio/ai/ic）
+* `KEYWORDS`（领域关键词列表）
+* `MY_REPORT_DATA_PATH` / `OUTPUT_FILE`
 
-AI domain
+> 适用场景：希望引入更大规模、更多样的跨领域数据，提高泛化能力（但构建耗时更长、数据体积更大）。
 
-IC domain
+---
 
-writes: mixed_finetune_dataset.jsonl
+## 训练（SFT + LoRA + 4bit）
 
-You can edit:
+训练入口：`Qwen_finetuning.py`
 
-TOTAL_SAMPLES, RATIOS
-
-KEYWORDS for domain filtering
-
-paths: MY_REPORT_DATA_PATH, OUTPUT_FILE
-
-Training
-Entry: Qwen_finetuning.py
-
-bash
-复制代码
+```bash
 python Qwen_finetuning.py
-Default Training Recipe
-Model:
+```
 
-Base: Qwen/Qwen2.5-7B-Instruct
+### 默认训练配方（来自代码）
 
-max_seq_length = 2048
+* Base 模型：`Qwen/Qwen2.5-7B-Instruct`
+* `max_seq_length = 2048`
+* `load_in_4bit = True`
+* LoRA：
 
-load_in_4bit = True
+  * `r = 16`
+  * `lora_alpha = 32`
+  * `lora_dropout = 0`
+  * target modules：
 
-LoRA:
+    * `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`
+* 数据切分：90% train / 10% eval（`seed=42`）
+* TrainingArguments：
 
-r = 16
+  * `num_train_epochs=3`
+  * `per_device_train_batch_size=2`
+  * `gradient_accumulation_steps=4`
+  * `learning_rate=2e-4`
+  * `warmup_steps=5`
+  * `optim="adamw_8bit"`
+  * `eval_strategy="steps"`, `eval_steps=50`
+  * `save_strategy="steps"`, `save_steps=50`
+  * `load_best_model_at_end=True`
+  * `output_dir="outputs"`
+  * `neftune_noise_alpha=5`
 
-lora_alpha = 32
+### Prompt 模板
 
-lora_dropout = 0
+训练时会把样本拼成 ChatML（你代码里手动拼接）：
 
-bias = "none"
+* system：固定的跨领域专家系统提示词
+* user：`instruction` + 可选 `input`（作为“补充信息”）
+* assistant：目标 `output`
 
-target_modules = ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]
+---
 
-TrainingArguments (defaults in code):
+### 训练输出
 
-epochs: 3
+训练完成后会生成：
 
-batch size: 2
+* `outputs/`：训练日志/中间 checkpoint（**建议不要提交到 GitHub**）
+* `Qwen_finetuning_model/`：LoRA adapter（`save_pretrained`）
+* `Qwen_finetuning_tokenizer/`：tokenizer（`save_pretrained`）
 
-grad accumulation: 4
+> 注意：你的 `inference.py/chat.py` 目前从 `Qwen_finetuning_model/` 加载 tokenizer。
+> 若 tokenizer 实际保存在 `Qwen_finetuning_tokenizer/`，请保持一致（见 FAQ）。
 
-lr: 2e-4
+---
 
-warmup steps: 5
+## 评估（loss & perplexity）
 
-optimizer: adamw_8bit
+运行：
 
-eval: every 50 steps
-
-save: every 50 steps
-
-load_best_model_at_end = True
-
-output dir: outputs/
-
-Note: Your script sets HF_ENDPOINT=https://hf-mirror.com to speed up HF downloads in restricted networks.
-
-Prompt Template
-Your training builds a ChatML-style prompt with:
-
-system: a fixed multi-domain expert system prompt (AI / IC / Biomedicine)
-
-user: instruction + optional input as “补充信息”
-
-assistant: the target output
-
-Outputs
-After training:
-
-checkpoints/logs: outputs/
-
-LoRA adapter: Qwen_finetuning_model/
-
-tokenizer: Qwen_finetuning_tokenizer/
-
-Qwen_finetuning_model/ typically contains:
-
-adapter_model.safetensors
-
-adapter_config.json
-
-(optionally) tokenizer + chat template files if copied there
-
-Evaluation
-Entry: evaluate.py
-
-bash
-复制代码
+```bash
 python evaluate.py
-What it does:
+```
 
-loads Qwen_finetuning_model
+该脚本会：
 
-loads mixed_finetune_dataset.jsonl
+* 加载 `Qwen_finetuning_model`
+* 读取 `mixed_finetune_dataset.jsonl`
+* 重新按 90/10 切分验证集
+* 输出：
 
-re-splits 90/10 with fixed seed
+  * `Eval Loss`
+  * `Perplexity = exp(eval_loss)`
 
-reports:
+> 重要：`evaluate.py` 默认 `max_seq_length=1024`，与训练的 2048 不一致。
+> 如果你的样本很长，建议把评估脚本也调到 2048 以减少截断影响。
 
-eval_loss
+---
 
-perplexity = exp(eval_loss)
+## 推理（单条示例）
 
-Important: evaluate.py uses max_seq_length=1024 by default.
-If your samples are long, consider increasing it to match training (2048) for more consistent evaluation.
+运行：
+
+```bash
+python inference.py
+```
+
+默认会生成一条示例回答（流式输出）。
+你可以修改脚本中的：
+
+* `instruction`
+* `system_prompt`
+
+---
+
+## 终端聊天（CLI）
+
+运行：
+
+```bash
+python chat.py
+```
+
+特性：
+
+* 输入 `exit`/`quit` 退出
+* 流式输出（`TextStreamer`）
+* 解码参数（默认）：
+
+  * `max_new_tokens=512`
+  * `repetition_penalty=1.3`
+  * `no_repeat_ngram_size=3`
+  * `temperature=0.8`
+  * `top_p=0.9`
+
+---
+
+## 可复现性与推荐实践
+
+* 数据切分 seed：`seed=42`
+* 训练 seed：`seed=3407`
+
+---
+
+
+## 常见问题（FAQ）
+
+### Q1：为什么训练保存 tokenizer 到 `Qwen_finetuning_tokenizer/`，但推理/聊天从 `Qwen_finetuning_model/` 加载？
+
+你的 `chat.py/inference.py` 是从 `Qwen_finetuning_model` 加载 tokenizer。
+解决方案（任选一个）：
+
+* **方案 A（推荐）**：修改 `chat.py/inference.py`，让 tokenizer 从 `Qwen_finetuning_tokenizer` 加载
+* **方案 B**：把 tokenizer 文件复制到 `Qwen_finetuning_model/`，确保两边一致
+
+### Q2：评估的 `max_seq_length=1024` 会影响结果吗？
+
+会。长文本会被截断，导致 loss/perplexity 不完全可比。
+建议改成与训练一致（2048）或明确记录差异。
+
+### Q4：显存不够怎么办？
+
+* 降低 `per_device_train_batch_size`
+* 提高 `gradient_accumulation_steps`
+* 降低 `max_seq_length`
+* 减少数据规模（先用 Option A）
+
+---
+
+## 致谢
+
+* Unsloth：高效训练与推理加速
+* Hugging Face TRL：SFTTrainer
+* PEFT / bitsandbytes：LoRA 与 4-bit 生态
+
+---
+
