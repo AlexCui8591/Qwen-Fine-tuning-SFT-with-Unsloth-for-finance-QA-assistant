@@ -19,7 +19,7 @@
   - [默认训练参数](#默认训练参数)
   - [Prompt 模板](#prompt-模板)
   - [训练输出](#训练输出)
-- [评估（loss & perplexity）](#评估loss--perplexity)
+- [评估（Teacher-forcing + 生成式评估）](#评估(Teacher-forcing + 生成式评估))
 - [推理（单条示例）](#推理单条示例)
 - [终端聊天（CLI）](#终端聊天cli)
 - [可复现性与推荐实践](#可复现性与推荐实践)
@@ -255,26 +255,79 @@ python Qwen_finetuning.py
 
 ---
 
-## 评估（loss & perplexity）
+下面是你 README 里“评估（loss & perplexity）”这一段的**精修版**，内容**严格对应我给你的新版 `evaluate.py`**（它不止 loss/ppl，还包含生成式评估、截断统计、可选 ROUGE、并生成输出文件）。
 
-运行：
+---
+
+## 评估（Teacher-forcing + 生成式评估）
+
+运行（默认配置：`max_seq_length=2048`，与训练对齐）：
 
 ```bash
 python evaluate.py
 ```
 
-该脚本会：
+* **加载模型**
 
-* 加载 `Qwen_finetuning_model`
-* 读取 `mixed_finetune_dataset.jsonl`
-* 重新按 90/10 切分验证集
-* 输出：
+  * 从 `Qwen_finetuning_model/` 加载你保存的 LoRA 微调模型（4-bit）
 
-  * `Eval Loss`
-  * `Perplexity = exp(eval_loss)`
+* **加载并划分验证集**
 
-> 重要：`evaluate.py` 默认 `max_seq_length=1024`，与训练的 2048 不一致。
-> 如果你的样本很长，建议把评估脚本也调到 2048 以减少截断影响。
+  * 读取 `mixed_finetune_dataset.jsonl`
+  * 按 `90/10` 重新切分（`seed=42`），取 10% 作为验证集
+
+* **统计数据长度与截断情况（用于解释 loss 可靠性）**
+
+  * 计算完整样本（system+user+reference）的 token 长度分布
+  * 输出 `truncation_rate`（超过 `max_seq_length` 的比例）
+
+* **Teacher-forcing 评估（训练式评估）**
+
+  * 使用 **Completion-only masking**：仅在 assistant 输出段计算 loss
+  * 输出：
+
+    * `eval_loss`
+    * `perplexity = exp(eval_loss)`
+
+* **生成式评估**
+
+  * 只输入 `system + user`，让模型 `generate()` 生成答案
+  * 统计并输出：
+
+    * `empty_rate`（空输出率）
+    * `avg_pred_len_tokens`（平均生成长度）
+    * `avg_ref_len_tokens`（平均参考答案长度）
+    * `len_ratio_pred_over_ref`（生成/参考长度比）
+    * `distinct-1`、`distinct-2`（多样性/重复度指标）
+
+* **保存评估产物**
+
+  * `evaluation_results/metrics.json`：所有指标汇总
+  * `evaluation_results/predictions.jsonl`：逐条保存 `instruction/input/reference/prediction`，方便人工抽查
+
+---
+
+### 可选：开启 ROUGE 指标
+
+如果你希望在生成式评估中计算 **ROUGE-1/2/L**，先安装依赖：
+
+```bash
+pip install evaluate rouge-score
+```
+
+然后运行：
+
+```bash
+python evaluate.py --rouge
+```
+-
+
+### 参数说明（可选）
+
+* `--max_seq_length`：默认 2048（与训练对齐，减少截断影响）
+* `--max_new_tokens`：生成式评估输出长度上限（默认 512）
+* `--eval_ratio`：验证集比例（默认 0.1）
+* `--seed`：切分随机种子（默认 42）
 
 ---
 
