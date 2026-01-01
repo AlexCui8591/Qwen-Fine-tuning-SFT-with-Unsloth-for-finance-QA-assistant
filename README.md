@@ -1,0 +1,2 @@
+# Qwen-Fine-tuning-SFT-with-Unsloth-for-finance-QA-assistant
+This project establishes a proprietary dataset for the financial investment sector by compiling relevant research reports and materials from the financial domain. It employs Unsloth to conduct LoRA + 4-bit Supervised Fine-Tuning (SFT) on Qwen2.5-7B-Instruct, subsequently exporting the LoRA Adapter weights and tokeniser while conducting validation. 
