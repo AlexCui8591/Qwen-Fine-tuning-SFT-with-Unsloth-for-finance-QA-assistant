@@ -1,4 +1,3 @@
-````markdown
 # QWEN_FINETUNING：Qwen2.5-7B-Instruct 的 LoRA SFT 微调（Unsloth + TRL）
 
 > 使用 **Unsloth** + **TRL SFTTrainer** 对 `Qwen/Qwen2.5-7B-Instruct` 做 **4-bit 量化加载 + LoRA 适配器** 的 **SFT（监督微调）**。  
@@ -8,7 +7,7 @@
 
 ## 目录
 
-- [项目亮点](#项目亮点)
+- [项目要点](#项目要点)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
 - [环境与安装](#环境与安装)
@@ -17,21 +16,15 @@
   - [Option A：小规模混合构建（快速验证）](#option-a小规模混合构建快速验证)
   - [Option B：大规模混合构建（领域筛选）](#option-b大规模混合构建领域筛选)
 - [训练（SFT + LoRA + 4bit）](#训练sft--lora--4bit)
-  - [默认训练配方（来自代码）](#默认训练配方来自代码)
+  - [默认训练参数](#默认训练参数)
   - [Prompt 模板](#prompt-模板)
   - [训练输出](#训练输出)
 - [评估（loss & perplexity）](#评估loss--perplexity)
 - [推理（单条示例）](#推理单条示例)
 - [终端聊天（CLI）](#终端聊天cli)
 - [可复现性与推荐实践](#可复现性与推荐实践)
-- [发布到 GitHub：所有选项（必读）](#发布到-github所有选项必读)
-  - [Option 1：只开源代码（推荐默认）](#option-1只开源代码推荐默认)
-  - [Option 2：发布 LoRA 权重（Git LFS）](#option-2发布-lora-权重git-lfs)
-  - [Option 3：发布到 Hugging Face / GitHub Release](#option-3发布到-hugging-face--github-release)
-- [附录：.gitignore / Git LFS / requirements 模板](#附录gitignore--git-lfs--requirements-模板)
 - [常见问题（FAQ）](#常见问题faq)
 - [致谢](#致谢)
-- [许可证](#许可证)
 
 ---
 
@@ -51,7 +44,7 @@
 
 ## 项目结构
 
-> 下面结构与你当前脚本命名一致：
+> 下面结构与脚本命名一致：
 
 ```bash
 QWEN_FINETUNING/
@@ -100,7 +93,7 @@ python chat.py
 ### 运行前提
 
 * Python 3.10+（推荐）
-* NVIDIA GPU + CUDA（推荐；脚本会把输入 `.to("cuda")`）
+* NVIDIA GPU + CUDA（`.to("cuda")`）
 * `bitsandbytes`（4-bit 量化依赖）
 
 ### 安装依赖
@@ -119,7 +112,7 @@ pip install unsloth transformers datasets trl accelerate peft bitsandbytes tqdm 
 
 ## 数据集
 
-你的训练脚本默认读取：
+训练默认读取：
 * `mixed_finetune_dataset.jsonl`（位于项目根目录）
 
 ### 数据格式（JSONL）
@@ -147,7 +140,7 @@ pip install unsloth transformers datasets trl accelerate peft bitsandbytes tqdm 
 python data_integration.py
 ```
 
-默认行为（来自代码）：
+默认构建（来自代码）：
 
 * 读取本地：`my_dataset.json`
 * streaming 拉取并采样：
@@ -176,7 +169,7 @@ python data_integration.py
 python data_set_generation.py
 ```
 
-默认行为（来自代码）：
+默认构建（来自代码）：
 
 * 读取本地：`my_dataset.json`
 * streaming 拉取并采样：
@@ -211,7 +204,7 @@ python data_set_generation.py
 python Qwen_finetuning.py
 ```
 
-### 默认训练配方（来自代码）
+### 默认训练参数
 
 * Base 模型：`Qwen/Qwen2.5-7B-Instruct`
 * `max_seq_length = 2048`
@@ -241,7 +234,7 @@ python Qwen_finetuning.py
 
 ### Prompt 模板
 
-训练时会把样本拼成 ChatML（你代码里手动拼接）：
+训练时会把样本拼成 ChatML：
 
 * system：固定的跨领域专家系统提示词
 * user：`instruction` + 可选 `input`（作为“补充信息”）
@@ -253,7 +246,7 @@ python Qwen_finetuning.py
 
 训练完成后会生成：
 
-* `outputs/`：训练日志/中间 checkpoint（**建议不要提交到 GitHub**）
+* `outputs/`：训练日志/中间 checkpoint
 * `Qwen_finetuning_model/`：LoRA adapter（`save_pretrained`）
 * `Qwen_finetuning_tokenizer/`：tokenizer（`save_pretrained`）
 
@@ -352,6 +345,7 @@ python chat.py
 * 提高 `gradient_accumulation_steps`
 * 降低 `max_seq_length`
 * 减少数据规模（先用 Option A）
+* 使用较大显存GPU(推荐根据数据集大小，使用较大GPU进行微调，或并行训练)
 
 ---
 
