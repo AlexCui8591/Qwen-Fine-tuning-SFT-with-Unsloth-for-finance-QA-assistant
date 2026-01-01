@@ -19,7 +19,7 @@
   - [默认训练参数](#默认训练参数)
   - [Prompt 模板](#prompt-模板)
   - [训练输出](#训练输出)
-- [评估（Teacher-forcing + 生成式评估）](#评估(Teacher-forcing + 生成式评估))
+- [评估：Teacher-forcing 与生成式评估](#评估teacher-forcing-与生成式评估)
 - [推理（单条示例）](#推理单条示例)
 - [终端聊天（CLI）](#终端聊天cli)
 - [可复现性与推荐实践](#可复现性与推荐实践)
@@ -259,7 +259,7 @@ python Qwen_finetuning.py
 
 ---
 
-## 评估（Teacher-forcing + 生成式评估）
+## 评估：Teacher-forcing 与生成式评估
 
 运行（默认配置：`max_seq_length=2048`，与训练对齐）：
 
@@ -307,7 +307,7 @@ python evaluate.py
 
 ---
 
-### 可选：开启 ROUGE 指标
+### 开启 ROUGE 指标
 
 如果你希望在生成式评估中计算 **ROUGE-1/2/L**，先安装依赖：
 
