@@ -392,7 +392,7 @@ python chat.py
 会。长文本会被截断，导致 loss/perplexity 不完全可比。
 建议改成与训练一致（2048）或明确记录差异。
 
-### Q4：显存不够怎么办？
+### Q3：显存不够怎么办？
 
 * 降低 `per_device_train_batch_size`
 * 提高 `gradient_accumulation_steps`
