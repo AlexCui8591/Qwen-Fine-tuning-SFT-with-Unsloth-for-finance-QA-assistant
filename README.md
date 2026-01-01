@@ -402,7 +402,7 @@ python chat.py
 
 ---
 
-## 致谢
+## 引用
 
 * Unsloth：高效训练与推理加速
 * Hugging Face TRL：SFTTrainer
